@@ -1,2 +1,31 @@
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/edwarddramirez/taxi-forecast/HEAD) [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/license/mit) ![Python](https://img.shields.io/badge/python-3.11.4-blue.svg) ![Repo Size](https://img.shields.io/github/repo-size/edwarddramirez/taxi-forecast) 
+
 # taxi-forecast
-Forecast taxi activity with deep learning.
+
+## Introduction
+Knowing where to go to find customers is the most important question for taxi drivers and hail-riding networks. If demand for taxis can be reliably predicted in real-time, taxi companies can dispatch drivers in a timely manner and drivers can optimize their route decision to maximize their earnings in a given day. This project aims to use rich trip-level data from NYC Taxi and Limousine Commission to construct time-series taxi rides data for 40,000 routes and forecast demand for rides. We will explore deep learning models for time series, such RNNs (LSTM), DeepAR, Transformers, and compare them with baseline statistical models, such as ARIMA and VAR.
+
+## Installation
+Run the `environment.yml` file by running the following command on the main repo directory:
+```
+conda env create
+```
+The installation works for `conda==4.12.0`. This will install all packages needed to run the code on a CPU with `jupyter`. 
+
+If you want to run this code with a CUDA GPU, you will need to download the appropriate `jaxlib==0.4.13` version. For example, for my GPU running on `CUDA==12.3`, I would run:
+```
+pip install jaxlib==0.4.13+cuda12.cudnn89
+```
+The key to using this code directly would be to retain the `jax` and `jaxlib` versions.
+
+## Directory Structure
+- `data`: Contains all data
+- `data_processing`: Contains notebooks for processing the data
+- `models`: (Tentative) Contains modules of custom models used to perform fits
+- `notebooks`: Contains notebook files performing fits and generating primary results
+- `utils`: Contains useful modules or files 
+
+Each directory contains an individual `README.md` file with more details of directory contents.
+
+## Contributors
+- [Edward Ramirez](https://github.com/edwarddramirez)
