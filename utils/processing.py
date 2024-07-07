@@ -20,7 +20,7 @@ def load_taxi_data(month, year, vehicle_type):
 
     # check vehicle type is valid
     if vehicle_type not in ['yellow', 'green', 'fhv', 'fhvhv']: # error check vehicle_type
-        return ValueError('Vehicle must be either \'yellow\', \'green\', \'fhv\', or \'hvfhv\'')
+        raise ValueError('Vehicle must be either \'yellow\', \'green\', \'fhv\', or \'hvfhv\'')
 
     url = "https://d37ci6vzurychx.cloudfront.net/trip-data/{}_tripdata_{}-{}.parquet".format(vehicle_type, year, month)
     return pd.read_parquet(url)
