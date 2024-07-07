@@ -19,11 +19,12 @@ pip install jaxlib==0.4.13+cuda12.cudnn89
 The key to using this code directly would be to retain the `jax` and `jaxlib` versions.
 
 ## Directory Structure
-- `data`: Contains all data
-- `data_processing`: Contains notebooks for processing the data
-- `models`: (Tentative) Contains modules of custom models used to perform fits
-- `notebooks`: Contains notebook files performing fits and generating primary results
-- `utils`: Contains useful modules or files 
+- `data`: Data Files
+- `data_processing`: Notebooks for processing the data
+- `models`: (Tentative) Modules of custom models used to perform fits
+- `notebooks`: Notebook files performing fits and generating primary results
+- `utils`: Custom modules or files 
+- `scratch`: For unclean files used to develop code
 
 Each directory contains an individual `README.md` file with more details of directory contents.
 
