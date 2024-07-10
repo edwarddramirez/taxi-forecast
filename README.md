@@ -15,8 +15,9 @@ The installation works for `conda==22.9.0`. This will install all packages neede
 `Note:` This file has a lot of junk right now. Tailor it to the project's needs later down the line.
 
 ## Directory Structure
-- `data`: Data Files
-- `data_processing`: Notebooks for processing the data
+- `assets`: Additional assets unrelated to taxi data
+- `data`: Taxi data files
+- `data_processing`: Notebooks for processing the taxi data
 - `models`: (Tentative) Modules of custom models used to perform fits
 - `notebooks`: Notebook files performing fits and generating primary results
 - `utils`: Custom modules or files 
@@ -26,3 +27,5 @@ Each directory contains an individual `README.md` file with more details of dire
 
 ## Contributors
 - [Edward Ramirez](https://github.com/edwarddramirez)
+- [Nazanin Komeilizadeh](https://github.com/NazThePhysicist)
+- [Jade Ngoc Nguyen](https://github.com/jadenguyen)
