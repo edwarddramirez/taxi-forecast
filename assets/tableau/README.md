@@ -1,0 +1,1 @@
+Note, since I (Edward) created this Tableau Public workbook locally. I'm the only user that has write access to this. I have shared the workbook and dashboard online in order for us to change it as we need it.
