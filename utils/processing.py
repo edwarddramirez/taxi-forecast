@@ -26,28 +26,45 @@ def load_taxi_data(month, year, vehicle_type):
     url = "https://d37ci6vzurychx.cloudfront.net/trip-data/{}_tripdata_{}-{}.parquet".format(vehicle_type, year, month)
     return pd.read_parquet(url)
 
-def bin_data(df):
+def bin_data(df, by_value = ['PULocationID'], additional_features = False):
     '''
-    Bin ride data by hour and pickup location. If desired, can easily be made to bin by other time intervals.
-    Src: 99_tableau_processing.ipynb
+    Bin ride data by hour and location information. If desired, can easily be made to bin by other time intervals.
+    Src: 99_tableau_processing.ipynb (by_value = ['PULocationID'])
+    Src: 02_a_processed_data_dev.ipynb (by_value = ['PULocationID', 'DOLocationID'])
 
     inputs:
         df: pandas dataframe with datetime column
+        by_value: list of strings, values to bin data by (e.g. ['PULocationID'], ['PULocationID', 'DOLocationID'])
+        additional_features: boolean, whether to include additional features (e.g. fare amount, tip amount, etc.)
     
     outputs:
-        ts_H_y_z: pandas dataframe with datetime index, location column, and counts column
+        ts: pandas dataframe with datetime index, location column, and counts column
     '''
-    ts_h_y_z = df.set_index('pickup_datetime').groupby(['PULocationID', pd.Grouper(freq='h')]).size() # group by hour and location
-    ts_H_y_z = ts_h_y_z.to_frame(name = 'counts') # convert to dataframe 
-    ts_H_y_z = ts_H_y_z.unstack(level=0).fillna(0) # unstack to obtain missing hours as NaNs, fill missing rides with 0
-    ts_H_y_z.index = ts_H_y_z.index.tz_localize('America/New_York', ambiguous = True) # need to localize timezone for time to appear
-    ts_H_y_z = ts_H_y_z.stack(future_stack = True) # undo the unstacking
-    ts_H_y_z = ts_H_y_z.swaplevel() # swap indices so location is first
-    ts_H_y_z = ts_H_y_z.reset_index() # remove the stacked structure to have standard dataframe with rows and columns only
-    ts_H_y_z.sort_values(by = ['PULocationID', 'pickup_datetime'], inplace = True) # sort by location and time
-    return ts_H_y_z
+    # bin data
+    gb = df.set_index('pickup_datetime').groupby(by_value + [pd.Grouper(freq='h')]) # group by hour and location
+    ts = gb.size().to_frame(name = 'counts') # convert to dataframe with binned counts
+    if additional_features: # include additional features
+        ts = (ts
+            .join(gb.agg({'total_amount': 'mean'}))
+            .join(gb.agg({'tip_amount': 'mean'}))
+            .join(gb.agg({'fare_amount': 'mean'}))
+            .join(gb.agg({'trip_distance': 'mean'}))
+        )
+    # process dataframe format
+    stack_level = [i for i in range(len(by_value))] # get level of indices
+    unstack_level = [i+1 for i in range(len(by_value))] # get level of indices to unstack
+    ts = ts.unstack(level=stack_level).fillna(0) # unstack to obtain missing hours as NaNs, fill missing rides with 0
+    ts.index = ts.index.tz_localize('America/New_York', ambiguous = True) # need to localize timezone for time to appear
+    ts = ts.stack(level=unstack_level, future_stack = True) # undo the unstacking
+    ts = ts.swaplevel() # swap indices so location is first
+    ts = ts.reset_index() # remove the stacked structure to have standard dataframe with rows and columns only
+    ts.sort_values(by = ['pickup_datetime'] + by_value, inplace = True) # sort by location and time
+    
+    if by_value not in [['PULocationID'], ['DOLocationID'], ['PULocationID', 'DOLocationID']]:
+        raise ValueError('Binning by ride or pickup location must be specified')
+    return ts
 
-def load_and_process_data(month, year, vehicle_type = 'yellow'):
+def load_and_process_data(month, year, vehicle_type = 'yellow', by_value = ['PULocationID'], additional_features = False, taxi_zones = None):
     '''
     Load and process taxi data by month, year, and vehicle type. Since these datasets are large, we also
     rebin the dataset into a dataframe with date as its index, location as a column, and number of rides "Counts" as another column.
@@ -62,12 +79,19 @@ def load_and_process_data(month, year, vehicle_type = 'yellow'):
         month: int, month of data to load
         year: int, year of data to load
         vehicle_type: string, type of vehicle data to load
+        by_value: list of strings, values to bin data by (e.g. ['PULocationID'], ['PULocationID', 'DOLocationID'])
+        additional_features: boolean, whether to include additional features (e.g. fare amount, tip amount, etc.)
+        taxi_zones: list of desired taxi zones
     
     outputs:
-        ts_H_y_z: pandas dataframe with datetime index, location column, and counts column
+        ts: pandas dataframe with datetime index, location columns, and counts column
     '''
     # load data
     df = load_taxi_data(month = month, year = year, vehicle_type = 'yellow')
+
+    # downcast data types to save time and memory (from 64 to 32 bits)
+    df = df.astype({'PULocationID':'int32', 'DOLocationID':'int32'}) # downgrade data type to save memory (from 64 to 32 bits)
+    df = df.astype({'total_amount':'float32', 'trip_distance':'float32', 'fare_amount':'float32', 'tip_amount':'float32'})
 
     # processing (minimal right now)
     if vehicle_type == 'yellow':
@@ -80,14 +104,27 @@ def load_and_process_data(month, year, vehicle_type = 'yellow'):
     else:
         raise ValueError('Only yellow taxi data is supported at the moment')
 
-    # remove rows outside of month and year
-    df = df[(df.pickup_datetime.dt.month == month) & (df.pickup_datetime.dt.year == year)]
+    # processing (minimal right now)
+    df = df.dropna() # drop missing values (as per 01_b_cleaning_data.ipynb)
+    conditions = (
+        (df.pickup_datetime.dt.month == month) & (df.pickup_datetime.dt.year == year) & # filter by month and year
+        (df.trip_distance > 0.) & (df.trip_distance < 500.) & # filter by trip distance
+        (df.total_amount > 0.) & (df.total_amount < 5000.) & # filter by total amount
+        (df.fare_amount > 0.) & (df.fare_amount < 5000.) & # filter by fare amount
+        (df.tip_amount >= 0.) & (df.tip_amount < 1000.)  # filter by tip amount 
+        )
+    df = df[conditions] # apply conditions
+
+    if taxi_zones is not None:
+        df = df[df.PULocationID.isin(taxi_zones)]
+        df = df[df.DOLocationID.isin(taxi_zones)]
 
     # bin data by hour and timezone
-    ts_H_y_z = bin_data(df)
-    return ts_H_y_z
+    ts = bin_data(df, by_value=by_value, additional_features=additional_features)
+    ts = ts.astype({'counts':'int32'}) # downcast data type to save memory (from 64 to 32 bits)
+    return ts
 
-def generate_processed_data(month_year, vehicle_type = 'yellow'):
+def generate_processed_data(month_year, vehicle_type = 'yellow', by_value = ['PULocationID'], additional_features = False, taxi_zones = None):
     '''
     Generate processed data for a list of months and years. This function is useful for generating a large dataset.
     To save memory, it processes and bins the data corresponding to each month and year.
@@ -96,14 +133,69 @@ def generate_processed_data(month_year, vehicle_type = 'yellow'):
     inputs:
         month_year: (N,2)-array containing N months and years to process
         vehicle_type: string, type of vehicle data to load
+        by_value: list of strings, values to bin data by (e.g. ['PULocationID'], ['PULocationID', 'DOLocationID'])
+        additional_features: boolean, whether to include additional features (e.g. fare amount, tip amount, etc.)
+        taxi_zones: list of desired taxi zones
     
     outputs:
         ts: pandas dataframe with datetime index, location column, and counts column for all months and years
     '''
     ts_list = []
     for year, month in tqdm(month_year): # can use itertools.product, but I think better in arrays
-        ts = load_and_process_data(month, year)
+        ts = load_and_process_data(month, year, by_value=by_value, additional_features=additional_features, taxi_zones=taxi_zones)
         ts_list.append(ts)
     ts = pd.concat(ts_list, ignore_index = False).reset_index() # cannot ignore index! reset to be ordered!
     ts = ts.drop(columns = 'index') # remove index column
+    return ts
+
+def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = False):
+    '''
+    Expanded version of bin_data function.
+    '''
+    if by_value == ['PULocationID']:
+        # bin data
+        if ~additional_features:
+            ts = df.set_index('pickup_datetime').groupby(['PULocationID', pd.Grouper(freq='h')]).size() # group by hour and location
+            ts = ts.to_frame(name = 'counts') # convert to dataframe 
+        else:
+            # do the same but include counts and average fare, tip, etc.
+            gb = df.set_index('pickup_datetime').groupby(['PULocationID', pd.Grouper(freq='h')])
+            ts = gb.size().to_frame('counts')
+            ts = (ts
+                .join(gb.agg({'total_amount': 'mean'}))
+                .join(gb.agg({'tip_amount': 'mean'}))
+                .join(gb.agg({'fare_amount': 'mean'}))
+                .join(gb.agg({'trip_distance': 'mean'}))
+            )
+        # process dataframe format
+        ts = ts.unstack(level=0).fillna(0) # unstack to obtain missing hours as NaNs, fill missing rides with 0
+        ts.index = ts.index.tz_localize('America/New_York', ambiguous = True) # need to localize timezone for time to appear
+        ts = ts.stack(future_stack = True) # undo the unstacking
+        ts = ts.swaplevel() # swap indices so location is first
+        ts = ts.reset_index() # remove the stacked structure to have standard dataframe with rows and columns only
+        ts.sort_values(by = ['PULocationID', 'pickup_datetime'], inplace = True) # sort by location and time
+    elif by_value == ['PULocationID', 'DOLocationID']:
+        # bin data
+        if ~additional_features:
+            ts = df.set_index('pickup_datetime').groupby(['PULocationID', 'DOLocationID', pd.Grouper(freq='h')]).size() # group by hour and location
+            ts = ts.to_frame(name = 'counts') # convert to dataframe 
+        else:
+            # do the same but include counts and average fare, tip, etc.
+            gb = df.set_index('pickup_datetime').groupby(['PULocationID', 'DOLocationID', pd.Grouper(freq='h')])
+            ts = gb.size().to_frame('counts')
+            ts = (ts
+                .join(gb.agg({'total_amount': 'mean'}))
+                .join(gb.agg({'tip_amount': 'mean'}))
+                .join(gb.agg({'fare_amount': 'mean'}))
+                .join(gb.agg({'trip_distance': 'mean'}))
+            )
+        ts = df.set_index('pickup_datetime').groupby(['PULocationID', 'DOLocationID', pd.Grouper(freq='h')]).size() # group by hour and location
+        ts = ts.to_frame(name = 'counts') # convert to dataframe 
+        ts = ts.unstack(level=[0,1]).fillna(0) # unstack to obtain missing hours as NaNs, fill missing rides with 0
+        ts.index = ts.index.tz_localize('America/New_York', ambiguous = True) # need to localize timezone for time to appear
+        ts = ts.stack(level = [1,2], future_stack = True) # undo the unstacking
+        ts = ts.reset_index() # remove the stacked structure to have standard dataframe with rows and columns only
+        ts.sort_values(by = ['pickup_datetime', 'PULocationID', 'DOLocationID'], inplace = True) # NOTE: order is different here
+    else:
+        raise ValueError('Binning by ride or pickup location must be specified')
     return ts
