@@ -49,6 +49,8 @@ def bin_data(df, by_value = ['PULocationID'], additional_features = False):
             .join(gb.agg({'tip_amount': 'mean'}))
             .join(gb.agg({'fare_amount': 'mean'}))
             .join(gb.agg({'trip_distance': 'mean'}))
+            .join(gb.agg({'passenger_count': 'mean'}))
+            .join(gb.agg({'trip_duration': 'mean'}))
         )
     # process dataframe format
     stack_level = [i for i in range(len(by_value))] # get level of indices
@@ -91,7 +93,7 @@ def load_and_process_data(month, year, vehicle_type = 'yellow', by_value = ['PUL
 
     # downcast data types to save time and memory (from 64 to 32 bits)
     df = df.astype({'PULocationID':'int32', 'DOLocationID':'int32'}) # downgrade data type to save memory (from 64 to 32 bits)
-    df = df.astype({'total_amount':'float32', 'trip_distance':'float32', 'fare_amount':'float32', 'tip_amount':'float32'})
+    df = df.astype({'total_amount':'float32', 'trip_distance':'float32', 'fare_amount':'float32', 'tip_amount':'float32', 'passenger_count':'float32'}) # downgrade data type to save memory (from 64 to 32 bits)
 
     # processing (minimal right now)
     if vehicle_type == 'yellow':
@@ -104,20 +106,28 @@ def load_and_process_data(month, year, vehicle_type = 'yellow', by_value = ['PUL
     else:
         raise ValueError('Only yellow taxi data is supported at the moment')
 
-    # processing (minimal right now)
+    # return only desired taxi zones
+    if taxi_zones is not None:
+        df = df[df.PULocationID.isin(taxi_zones)]
+        df = df[df.DOLocationID.isin(taxi_zones)]
+    
+    # calculate trip duration (min)
+    df['trip_duration'] = (df.dropoff_datetime - df.pickup_datetime).dt.total_seconds() / 60 
+    df = df.astype({'trip_duration':'float32'}) # downcast data type to save memory (from 64 to 32 bits)
+
+    # impose conditions based on features
     df = df.dropna() # drop missing values (as per 01_b_cleaning_data.ipynb)
     conditions = (
         (df.pickup_datetime.dt.month == month) & (df.pickup_datetime.dt.year == year) & # filter by month and year
         (df.trip_distance > 0.) & (df.trip_distance < 500.) & # filter by trip distance
         (df.total_amount > 0.) & (df.total_amount < 5000.) & # filter by total amount
         (df.fare_amount > 0.) & (df.fare_amount < 5000.) & # filter by fare amount
-        (df.tip_amount >= 0.) & (df.tip_amount < 1000.)  # filter by tip amount 
+        (df.tip_amount >= 0.) & (df.tip_amount < 1000.) &  # filter by tip amount 
+        (df.trip_duration > 0.) & (df.trip_duration < 600.) & # filter by trip duration
+        (df.passenger_count > 0.) & (df.passenger_count < 10) # filter by passenger count
         )
     df = df[conditions] # apply conditions
 
-    if taxi_zones is not None:
-        df = df[df.PULocationID.isin(taxi_zones)]
-        df = df[df.DOLocationID.isin(taxi_zones)]
 
     # bin data by hour and timezone
     ts = bin_data(df, by_value=by_value, additional_features=additional_features)
@@ -199,3 +209,106 @@ def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = Fal
     else:
         raise ValueError('Binning by ride or pickup location must be specified')
     return ts
+
+def postprocess_data(ts):
+    '''
+    Postprocess data to account for fare hikes and missing values in routes with no counts.
+    src: scratch/02_a_processed_data_dev.ipynb, scratch/03_a_processed_data_dev.ipynb
+
+    inputs:
+        ts: pandas dataframe with datetime index, location columns, and counts column (created using load_and_process_data function)
+
+    outputs:
+        ts: pandas dataframe with datetime index, location columns, and counts column (postprocessed) 
+    '''
+
+    # 23% fare hike: this simpler implementation better than only modifying fare price and recalculating total amount
+    fare_hike_date = pd.Timestamp('2022-12-19 00:00:00').tz_localize('America/New_York', ambiguous = True) # need to specify time zone to avoid ambiguity
+    prices = ['fare_amount', 'total_amount', 'tip_amount']
+    for price in prices:
+        ts[price] = np.where(ts['pickup_datetime'] <= fare_hike_date, ts[price] * 1.23, ts[price]) 
+    
+    # non-count values in routes with no counts are set to the mean of the non-zero values in the route (PULocationID, DOLocationID)
+    # verified correct implementation by checking that the mean of the non-zero values in the route is the same as the assigned mean with this approach
+    cols = ['total_amount', 'fare_amount', 'tip_amount', 'trip_distance', 'passenger_count', 'trip_duration']
+    for c in cols:
+        # Calculate average price per (latitude, longitude) where average_price is not zero
+        avg_c_by_route = ts[ts[c] != 0].groupby(['DOLocationID', 'PULocationID'])[c].mean().reset_index()
+        avg_c_by_route.rename(columns={c : 'avg_c_route'}, inplace=True)
+
+        # Merge this average price back to the original dataframe
+        ts = ts.merge(avg_c_by_route, on=['DOLocationID', 'PULocationID'], how='left')
+
+        # Replace zero average prices with the calculated average price per location
+        ts.loc[ts[c] == 0, c] = ts['avg_c_route']
+
+        # Drop the temporary column
+        ts.drop(columns=['avg_c_route'], inplace=True)
+    return ts
+
+def route_to_pulocation(ts, pulocationid):
+    '''
+    Combine route-level data to obtain pulocation-level data for a single taxi zone.
+    UPDATE: This function inputs mean values for routes with no counts, rather than zero values.
+
+    inputs:
+        ts: pandas dataframe with datetime index, location columns, and counts column (created using load_and_process_data function)
+        pulocationid: int, pickup location ID to filter data by
+
+    outputs:
+        ts_p: pandas dataframe with datetime index, location columns, and counts column for a single pickup location
+    '''
+    ts = ts[ts['PULocationID'] == pulocationid].copy()
+    gb = ts.groupby(['pickup_datetime', 'PULocationID'])
+
+    # weighted-average function accounting for zero-weights
+    def weighted_average(df, val_col, weight_col, print_statement = False):
+        values = df[val_col]
+        weights = df[weight_col]
+        if weights.sum() == 0.:
+            return df[val_col].mean()
+        return np.average(values, weights=weights)
+
+    # from groupby, sum the counts and perform weighted average of total_amount, etc. using counts as weights
+    ts_p = pd.DataFrame(gb['counts'].sum())
+    ts_p['total_amount'] = gb.apply(lambda x: weighted_average(x, 'total_amount', 'counts'))
+    ts_p['fare_amount'] = gb.apply(lambda x: weighted_average(x, 'fare_amount', 'counts'))
+    ts_p['tip_amount'] = gb.apply(lambda x: weighted_average(x, 'tip_amount', 'counts'))
+    ts_p['trip_distance'] = gb.apply(lambda x: weighted_average(x, 'trip_distance', 'counts'))
+    ts_p['passenger_count'] = gb.apply(lambda x: weighted_average(x, 'passenger_count', 'counts'))
+    ts_p['trip_duration'] = gb.apply(lambda x: weighted_average(x, 'trip_duration', 'counts'))
+    ts_p = ts_p.reset_index()
+
+    return ts_p
+
+
+def route_to_pulocation_old(ts, pulocationid):
+    '''
+    Combine route-level data to obtain pulocation-level data for a single taxi zone.
+
+    inputs:
+        ts: pandas dataframe with datetime index, location columns, and counts column (created using load_and_process_data function)
+        pulocationid: int, pickup location ID to filter data by
+
+    outputs:
+        ts_p: pandas dataframe with datetime index, location columns, and counts column for a single pickup location
+    '''
+    ts = ts[ts['PULocationID'] == pulocationid].copy()
+    gb = ts.groupby(['pickup_datetime', 'PULocationID'])
+
+    # weighted-average function accounting for zero-weights
+    def weighted_average(x, weights):
+        if weights.sum() == 0.:
+            return 0.
+        return np.average(x, weights=weights)
+
+    # from groupby, sum the counts and perform weighted average of total_amount, etc. using counts as weights
+    ts_p = pd.DataFrame(gb['counts'].sum())
+    ts_p['total_amount'] = gb.apply(lambda x: weighted_average(x['total_amount'], weights=x['counts']))
+    ts_p['fare_amount'] = gb.apply(lambda x: weighted_average(x['fare_amount'], weights=x['counts']))
+    ts_p['tip_amount'] = gb.apply(lambda x: weighted_average(x['tip_amount'], weights=x['counts']))
+    ts_p['trip_distance'] = gb.apply(lambda x: weighted_average(x['trip_distance'], weights=x['counts']))
+    ts_p['passenger_count'] = gb.apply(lambda x: weighted_average(x['passenger_count'], weights=x['counts']))
+    ts_p['trip_duration'] = gb.apply(lambda x: weighted_average(x['trip_duration'], weights=x['counts']))
+    ts_p = ts_p.reset_index()
+    return ts_p
