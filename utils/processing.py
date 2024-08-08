@@ -210,7 +210,7 @@ def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = Fal
         raise ValueError('Binning by ride or pickup location must be specified')
     return ts
 
-def postprocess_data(ts):
+def postprocess_data(ts, by_value = ['DOLocationID', 'PULocationID']):
     '''
     Postprocess data to account for fare hikes and missing values in routes with no counts.
     src: scratch/02_a_processed_data_dev.ipynb, scratch/03_a_processed_data_dev.ipynb
@@ -233,11 +233,11 @@ def postprocess_data(ts):
     cols = ['total_amount', 'fare_amount', 'tip_amount', 'trip_distance', 'passenger_count', 'trip_duration']
     for c in cols:
         # Calculate average price per (latitude, longitude) where average_price is not zero
-        avg_c_by_route = ts[ts[c] != 0].groupby(['DOLocationID', 'PULocationID'])[c].mean().reset_index()
+        avg_c_by_route = ts[ts[c] != 0].groupby(by_value)[c].mean().reset_index()
         avg_c_by_route.rename(columns={c : 'avg_c_route'}, inplace=True)
 
         # Merge this average price back to the original dataframe
-        ts = ts.merge(avg_c_by_route, on=['DOLocationID', 'PULocationID'], how='left')
+        ts = ts.merge(avg_c_by_route, on=by_value, how='left')
 
         # Replace zero average prices with the calculated average price per location
         ts.loc[ts[c] == 0, c] = ts['avg_c_route']

@@ -10,16 +10,14 @@ Run the `environment.yml` file by running the following command on the main repo
 ```
 conda env create
 ```
-The installation works for `conda==22.9.0`. This will install all packages needed to run the code on a CPU with `jupyter`. 
-
-`Note:` This file has a lot of junk right now. Tailor it to the project's needs later down the line.
+The installation works for `conda==22.9.0`. This will install all packages needed to run the code on a CPU with `jupyter` or `Binder`. 
 
 ## Directory Structure
 - `assets`: Additional assets unrelated to taxi data
 - `data`: Taxi data files
 - `data_processing`: Notebooks for processing the taxi data
 - `models`: (Tentative) Modules of custom models used to perform fits
-- `notebooks`: Notebook files performing fits and generating primary results
+- `notebooks`: Notebook files summarizing the data, performing fits, and generating main results
 - `utils`: Custom modules or files 
 - `scratch`: For unclean files used to develop code
 
@@ -29,3 +27,6 @@ Each directory contains an individual `README.md` file with more details of dire
 - [Edward Ramirez](https://github.com/edwarddramirez)
 - [Nazanin Komeilizadeh](https://github.com/NazThePhysicist)
 - [Jade Ngoc Nguyen](https://github.com/jadenguyen)
+- [Noah Gillespie](https://github.com/NoahGillespie)
+- [Sriram Raghunath](https://github.com/sriramr30)
+- [Li Meng](https://github.com/limeng-math)
