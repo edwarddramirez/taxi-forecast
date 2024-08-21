@@ -1,32 +1,59 @@
+from enum import Enum
+import os
+from typing import List, Union
 import numpy as np
 import pandas as pd
+import requests
 from tqdm import tqdm
 
-def load_taxi_data(month, year, vehicle_type):
+
+class TaxiType(Enum):
+    YELLOW = 'yellow'
+    GREEN = 'green'
+    FORHIRE = 'fhv'
+    HIGHVOLUMEFORHIRE = 'hvfhv'
+
+
+def download_taxi_data(file_path: str, file_name: str) -> None:
+    data_url = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
+    with open(file_path + file_name, 'wb') as data_file:
+        response = requests.get(data_url + file_name, stream=True)
+        data_file.write(response.content)
+
+
+def load_taxi_data(month: int, year: int, vehicle_type: Union[TaxiType, str]) -> pd.DataFrame:
     '''
-    Load taxi data by month, year, and vehicle type.
+    Load taxi data by month, year, and vehicle type, downloading it if needed
 
     inputs:
-        month: int or string, month of data to load
-        year: int or string, year of data to load
-        vehicle_type: string, type of vehicle data to load
+        month: int, month of data to load
+        year: int, year of data to load
+        vehicle_type: TaxiType, type of vehicle data to load
 
     outputs:
         df: pandas dataframe extracted from raw data file (parquet)
     '''
-    # process inputs
-    month = str(int(month)) ; year = str(int(year)) # allow for value-type inputs
-    if len(month) == 1:
-        month = '0' + month
+    # Data time limits
+    if not (1 <= month <= 12):
+        raise ValueError("'month' must be an integer in the range 1-12")
 
-    # check vehicle type is valid
-    if vehicle_type not in ['yellow', 'green', 'fhv', 'fhvhv']: # error check vehicle_type
-        raise ValueError('Vehicle must be either \'yellow\', \'green\', \'fhv\', or \'hvfhv\'')
+    if year < 2009:
+        raise ValueError("'year' is to early. Data is only available for 2009 onward.")
 
-    url = "https://d37ci6vzurychx.cloudfront.net/trip-data/{}_tripdata_{}-{}.parquet".format(vehicle_type, year, month)
-    return pd.read_parquet(url)
+    # Convert str to TaxType for compatability
+    if type(vehicle_type) is str:
+        vehicle_type = TaxiType(vehicle_type)
 
-def bin_data(df, by_value = ['PULocationID'], additional_features = False):
+    # Download file if needed
+    file_name = f"{vehicle_type.value}_tripdata_{year}-{month:02}.parquet"
+    file_path = "../data/"
+    if not os.path.isfile(file_path + file_name):
+        download_taxi_data(file_path, file_name)
+    
+    return pd.read_parquet(file_path + file_name)
+
+
+def bin_data(df: pd.DataFrame, by_value = ['PULocationID'], additional_features = False):
     '''
     Bin ride data by hour and location information. If desired, can easily be made to bin by other time intervals.
     Src: 99_tableau_processing.ipynb (by_value = ['PULocationID'])
@@ -66,43 +93,19 @@ def bin_data(df, by_value = ['PULocationID'], additional_features = False):
         raise ValueError('Binning by ride or pickup location must be specified')
     return ts
 
-def load_and_process_data(month, year, vehicle_type = 'yellow', by_value = ['PULocationID'], additional_features = False, taxi_zones = None):
-    '''
-    Load and process taxi data by month, year, and vehicle type. Since these datasets are large, we also
-    rebin the dataset into a dataframe with date as its index, location as a column, and number of rides "Counts" as another column.
-
-    TODO: 
-    - Clean the data further based on findings from 02_cleaning_data.ipynb
-    - Add data on prices
-    - Allow for creation and processing of other vehicle types: green, fhv, fhvhv (see above)
-    - Add extraneous data (weather, holidays, etc.)
-
-    inputs:
-        month: int, month of data to load
-        year: int, year of data to load
-        vehicle_type: string, type of vehicle data to load
-        by_value: list of strings, values to bin data by (e.g. ['PULocationID'], ['PULocationID', 'DOLocationID'])
-        additional_features: boolean, whether to include additional features (e.g. fare amount, tip amount, etc.)
-        taxi_zones: list of desired taxi zones
-    
-    outputs:
-        ts: pandas dataframe with datetime index, location columns, and counts column
-    '''
-    # load data
-    df = load_taxi_data(month = month, year = year, vehicle_type = 'yellow')
-
+def cast_and_clean_taxi_data(df: pd.DataFrame, month: int, year: int, vehicle_type: TaxiType, taxi_zones: List[int]):
     # downcast data types to save time and memory (from 64 to 32 bits)
     df = df.astype({'PULocationID':'int32', 'DOLocationID':'int32'}) # downgrade data type to save memory (from 64 to 32 bits)
     df = df.astype({'total_amount':'float32', 'trip_distance':'float32', 'fare_amount':'float32', 'tip_amount':'float32', 'passenger_count':'float32'}) # downgrade data type to save memory (from 64 to 32 bits)
 
     # processing (minimal right now)
-    if vehicle_type == 'yellow':
+    if vehicle_type is TaxiType.YELLOW:
         # split datetime into data and time
-        df.rename(
-            columns = {'tpep_pickup_datetime': 'pickup_datetime',
-                    'tpep_dropoff_datetime': 'dropoff_datetime'}, 
-            inplace = True
-        )
+        rename_mapping = {
+            'tpep_pickup_datetime': 'pickup_datetime',
+            'tpep_dropoff_datetime': 'dropoff_datetime'
+        }
+        df.rename(columns=rename_mapping, inplace=True)
     else:
         raise ValueError('Only yellow taxi data is supported at the moment')
 
@@ -127,14 +130,72 @@ def load_and_process_data(month, year, vehicle_type = 'yellow', by_value = ['PUL
         (df.passenger_count > 0.) & (df.passenger_count < 10) # filter by passenger count
         )
     df = df[conditions] # apply conditions
+    return df
 
+
+def load_and_process_data(
+        month: int, 
+        year: int, 
+        vehicle_type: Union[TaxiType, str]=TaxiType.YELLOW, 
+        by_value=['PULocationID'], 
+        additional_features: bool=False, 
+        taxi_zones: Union[List[int], None]=None
+    ) -> pd.DataFrame:
+    '''
+    Load and process taxi data by month, year, and vehicle type. Since these datasets are large, we also
+    rebin the dataset into a dataframe with date as its index, location as a column, and number of rides "Counts" as another column.
+
+    TODO: 
+    - Clean the data further based on findings from 02_cleaning_data.ipynb
+    - Add data on prices
+    - Allow for creation and processing of other vehicle types: green, fhv, fhvhv (see above)
+    - Add extraneous data (weather, holidays, etc.)
+
+    inputs:
+        month: int, month of data to load
+        year: int, year of data to load
+        vehicle_type: string, type of vehicle data to load
+        by_value: list of strings, values to bin data by (e.g. ['PULocationID'], ['PULocationID', 'DOLocationID'])
+        additional_features: boolean, whether to include additional features (e.g. fare amount, tip amount, etc.)
+        taxi_zones: list of desired taxi zones
+    
+    outputs:
+        ts: pandas dataframe with datetime index, location columns, and counts column
+    '''
+
+    if type(vehicle_type) is str:
+        vehicle_type = TaxiType(vehicle_type)
+
+    # load data
+    df = load_taxi_data(month, year, vehicle_type)
+    df = cast_and_clean_taxi_data(df, month, year, vehicle_type, taxi_zones)
 
     # bin data by hour and timezone
     ts = bin_data(df, by_value=by_value, additional_features=additional_features)
     ts = ts.astype({'counts':'int32'}) # downcast data type to save memory (from 64 to 32 bits)
     return ts
 
-def generate_processed_data(month_year, vehicle_type = 'yellow', by_value = ['PULocationID'], additional_features = False, taxi_zones = None):
+
+def generate_time_range(start_month, start_year, end_month, end_year):
+    month_year_pairs = []
+    for year in range(start_year, end_year + 1):
+        if year == start_year:
+            months = np.arange(start_month, 13)
+            pairs = np.meshgrid(np.array(year), months)
+            pairs = np.array(pairs).T.reshape(-1,2)
+            month_year_pairs.append(pairs)
+        elif year == end_year:
+            months = np.arange(1, end_month + 1)
+        else:
+            months = np.arange(1, 13)
+
+        pairs = np.meshgrid(np.array(year), months)
+        pairs = np.array(pairs).T.reshape(-1,2)
+        month_year_pairs.append(pairs)
+    return np.concatenate(month_year_pairs, axis=0)
+
+
+def generate_processed_data(month_year, vehicle_type = 'yellow', by_value = ['PULocationID'], additional_features=False, taxi_zones=None):
     '''
     Generate processed data for a list of months and years. This function is useful for generating a large dataset.
     To save memory, it processes and bins the data corresponding to each month and year.
@@ -152,11 +213,12 @@ def generate_processed_data(month_year, vehicle_type = 'yellow', by_value = ['PU
     '''
     ts_list = []
     for year, month in tqdm(month_year): # can use itertools.product, but I think better in arrays
-        ts = load_and_process_data(month, year, by_value=by_value, additional_features=additional_features, taxi_zones=taxi_zones)
+        ts = load_and_process_data(month, year, vehicle_type, by_value=by_value, additional_features=additional_features, taxi_zones=taxi_zones)
         ts_list.append(ts)
     ts = pd.concat(ts_list, ignore_index = False).reset_index() # cannot ignore index! reset to be ordered!
     ts = ts.drop(columns = 'index') # remove index column
     return ts
+
 
 def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = False):
     '''
@@ -210,7 +272,8 @@ def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = Fal
         raise ValueError('Binning by ride or pickup location must be specified')
     return ts
 
-def postprocess_data(ts, by_value = ['DOLocationID', 'PULocationID']):
+
+def postprocess_data(ts: pd.DataFrame, by_value = ['DOLocationID', 'PULocationID']):
     '''
     Postprocess data to account for fare hikes and missing values in routes with no counts.
     src: scratch/02_a_processed_data_dev.ipynb, scratch/03_a_processed_data_dev.ipynb
@@ -245,6 +308,7 @@ def postprocess_data(ts, by_value = ['DOLocationID', 'PULocationID']):
         # Drop the temporary column
         ts.drop(columns=['avg_c_route'], inplace=True)
     return ts
+
 
 def route_to_pulocation(ts, pulocationid):
     '''
