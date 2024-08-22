@@ -179,11 +179,10 @@ def load_and_process_data(
 def generate_time_range(start_month, start_year, end_month, end_year):
     month_year_pairs = []
     for year in range(start_year, end_year + 1):
-        if year == start_year:
+        if start_year == end_year:
+            months = np.arange(start_month, end_month + 1)
+        elif year == start_year:
             months = np.arange(start_month, 13)
-            pairs = np.meshgrid(np.array(year), months)
-            pairs = np.array(pairs).T.reshape(-1,2)
-            month_year_pairs.append(pairs)
         elif year == end_year:
             months = np.arange(1, end_month + 1)
         else:
@@ -273,7 +272,7 @@ def bin_data_expanded(df, by_value = ['PULocationID'], additional_features = Fal
     return ts
 
 
-def postprocess_data(ts: pd.DataFrame, by_value = ['DOLocationID', 'PULocationID']):
+def postprocess_data(ts: pd.DataFrame, by_value = ['DOLocationID', 'PULocationID'], fill_zero_w_avg=True):
     '''
     Postprocess data to account for fare hikes and missing values in routes with no counts.
     src: scratch/02_a_processed_data_dev.ipynb, scratch/03_a_processed_data_dev.ipynb
@@ -291,22 +290,23 @@ def postprocess_data(ts: pd.DataFrame, by_value = ['DOLocationID', 'PULocationID
     for price in prices:
         ts[price] = np.where(ts['pickup_datetime'] <= fare_hike_date, ts[price] * 1.23, ts[price]) 
     
-    # non-count values in routes with no counts are set to the mean of the non-zero values in the route (PULocationID, DOLocationID)
-    # verified correct implementation by checking that the mean of the non-zero values in the route is the same as the assigned mean with this approach
-    cols = ['total_amount', 'fare_amount', 'tip_amount', 'trip_distance', 'passenger_count', 'trip_duration']
-    for c in cols:
-        # Calculate average price per (latitude, longitude) where average_price is not zero
-        avg_c_by_route = ts[ts[c] != 0].groupby(by_value)[c].mean().reset_index()
-        avg_c_by_route.rename(columns={c : 'avg_c_route'}, inplace=True)
+    if fill_zero_w_avg:
+        # non-count values in routes with no counts are set to the mean of the non-zero values in the route (PULocationID, DOLocationID)
+        # verified correct implementation by checking that the mean of the non-zero values in the route is the same as the assigned mean with this approach
+        cols = ['total_amount', 'fare_amount', 'tip_amount', 'trip_distance', 'passenger_count', 'trip_duration']
+        for c in cols:
+            # Calculate average price per (latitude, longitude) where average_price is not zero
+            avg_c_by_route = ts[ts[c] != 0].groupby(by_value)[c].mean().reset_index()
+            avg_c_by_route.rename(columns={c : 'avg_c_route'}, inplace=True)
 
-        # Merge this average price back to the original dataframe
-        ts = ts.merge(avg_c_by_route, on=by_value, how='left')
+            # Merge this average price back to the original dataframe
+            ts = ts.merge(avg_c_by_route, on=by_value, how='left')
 
-        # Replace zero average prices with the calculated average price per location
-        ts.loc[ts[c] == 0, c] = ts['avg_c_route']
+            # Replace zero average prices with the calculated average price per location
+            ts.loc[ts[c] == 0, c] = ts['avg_c_route']
 
-        # Drop the temporary column
-        ts.drop(columns=['avg_c_route'], inplace=True)
+            # Drop the temporary column
+            ts.drop(columns=['avg_c_route'], inplace=True)
     return ts
 
 
