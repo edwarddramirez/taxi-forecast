@@ -17,7 +17,7 @@ The installation works for `conda==22.9.0`. This will install all packages neede
 ### GPU Environments
 The model training notebooks were built using `Google Colaboratory`. The `MLP`, `RNN`, and `LSTM` models are built using `pytorch=2.3.1` (i.e., the most updated version of `pytorch` on Google Colaboratory when we started this project). Therefore, the notebooks training these models should work out-of-the-box if you open them on Colab. 
 
-On the other hand, our graph neural networks were built using the `torch-geometric-temporal` package. This package takes a long time to install and requires some patching due to incompatibility with our version of `pytorch`. We show how to install a permanent environment in `Google Drive` in this [Colab Notebook](https://github.com/edwarddramirez/taxi-forecast/blob/main/assets/colab/01_pytgt_test.ipynb). To install the package without a permanent environment, see this [Colab Notebook](https://github.com/edwarddramirez/taxi-forecast/blob/main/assets/colab/00_pytgt_test_no_permanent_env.ipynb) (not recommended). 
+On the other hand, our graph neural networks were built using the `torch-geometric-temporal` package. This package takes a long time to install and requires some patching due to incompatibility with our version of `pytorch`. We show how to install a permanent environment in `Google Drive` in this [Colab Notebook](https://colab.research.google.com/github/edwarddramirez/taxi-forecast/blob/main/assets/colab/01_pytgt_test.ipynb). To install the package without a permanent environment, see this [Colab Notebook](https://colab.research.google.com/github/edwarddramirez/taxi-forecast/blob/main/assets/colab/00_pytgt_test_no_permanent_env.ipynb) (not recommended). 
 
 ## Notebooks
 
