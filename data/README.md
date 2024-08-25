@@ -1,1 +1,1 @@
-Directory for saved data that is uploaded in repo
+Directory for saved data that is uploaded to repo

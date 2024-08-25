@@ -6,17 +6,23 @@
 Knowing where to go to find customers is the most important question for taxi drivers and hail-riding networks. If demand for taxis can be reliably predicted in real-time, taxi companies can dispatch drivers in a timely manner and drivers can optimize their route decision to maximize their earnings in a given day. This project aims to use rich trip-level data from NYC Taxi and Limousine Commission to construct time-series taxi rides data for 40,000 routes and forecast demand for rides. We will explore deep learning models for time series, such RNNs (LSTM), DeepAR, Transformers, and compare them with baseline statistical models, such as ARIMA and VAR.
 
 ## Installation
+
+### Base Environment
 Run the `environment.yml` file by running the following command on the main repo directory:
 ```
 conda env create
 ```
-The installation works for `conda==22.9.0`. This will install all packages needed to run the code on a CPU with `jupyter` or `Binder`. 
+The installation works for `conda==22.9.0`. This will install all packages needed to run the data processing code and ARIMAX fitting notebooks with `jupyter` or `Binder`. 
+
+### GPU Environments
+The model training notebooks were built using `Google Colaboratory`. The `MLP`, `RNN`, and `LSTM` models are built using `pytorch=2.3.1` (i.e., the most updated version of `pytorch` on Google Colaboratory when we started this project). Therefore, the notebooks training these models should work out-of-the-box if you open them on Colab. 
+
+On the other hand, our graph neural networks were built using the `torch-geometric-temporal` package. This package takes a long time to install and requires some patching due to incompatibility with our version of `pytorch`. We show how to install a permanent environment in `Google Drive` in this [Colab Notebook](https://github.com/edwarddramirez/taxi-forecast/blob/main/assets/colab/01_pytgt_test.ipynb). To install the package without a permanent environment, see this [Colab Notebook](https://github.com/edwarddramirez/taxi-forecast/blob/main/assets/colab/00_pytgt_test_no_permanent_env.ipynb) (not recommended). 
 
 ## Directory Structure
 - `assets`: Additional assets unrelated to taxi data
-- `data`: Taxi data files
+- `data`: Taxi data directory
 - `data_processing`: Notebooks for processing the taxi data
-- `models`: (Tentative) Modules of custom models used to perform fits
 - `notebooks`: Notebook files summarizing the data, performing fits, and generating main results
 - `utils`: Custom modules or files 
 - `scratch`: For unclean files used to develop code
