@@ -2,6 +2,7 @@
 .vs/*
 data/*
 !data/test
+models/model_validation/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
