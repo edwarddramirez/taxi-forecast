@@ -21,10 +21,10 @@ On the other hand, our graph neural networks were built using the `torch-geometr
 
 ## Notebooks
 
-1. [00_a_data_summary.ipynb](): Summary of dataset and processing <a target="_blank" href="https://colab.research.google.com/github/edwarddramirez/taxi-forecast/blob/main/notebooks/02_a_gnn_fits.ipynb"> <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+1. [00_a_data_summary.ipynb](https://github.com/edwarddramirez/taxi-forecast/blob/main/notebooks/00_a_data_summary.ipynb): Summary of dataset and processing <a target="_blank" href="https://colab.research.google.com/github/edwarddramirez/taxi-forecast/blob/main/notebooks/00_a_data_summary.ipynb"> <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
  </a>
 
-2. [00_b_basic_ts_model.ipynb](): Fitting a basic statistical time series model `ARIMAX` to test data 
+2. [00_b_basic_ts_model.ipynb](https://github.com/edwarddramirez/taxi-forecast/blob/main/notebooks/00_b_basic_ts_model.ipynb): Fitting a basic statistical time series model `ARIMAX` to test data 
 <a target="_blank" href="https://colab.research.google.com/github/edwarddramirez/taxi-forecast/blob/main/notebooks/00_b_basic_ts_model.ipynb"> <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
  </a>
 
