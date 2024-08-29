@@ -3,7 +3,7 @@
 # taxi-forecast
 
 ## Introduction
-Knowing where to go to find customers is the most important question for taxi drivers and hail-riding networks. If demand for taxis can be reliably predicted in real-time, taxi companies can dispatch drivers in a timely manner and drivers can optimize their route decision to maximize their earnings in a given day. This project aims to use rich trip-level data from NYC Taxi and Limousine Commission to construct time-series taxi rides data for 40,000 routes and forecast demand for rides. We will explore deep learning models for time series, such as RNNs (LSTM), DeepAR, Transformers, and compare them with baseline statistical models, such as ARIMA and VAR.
+Knowing where to go to find customers is the most important question for taxi drivers and ride hailing networks. If demand for taxis can be reliably predicted in real-time, taxi companies can dispatch drivers in a timely manner and drivers can optimize their route decision to maximize their earnings in a given day. Consequently, customers will likely receive more reliable service with shorter wait time. This project aims to use rich trip-level data from the NYC Taxi and Limousine Commission to construct time-series taxi rides data for 63 taxi zones in Manhattan and forecast demand for rides. We will explore deep learning models for time series, including Multilayer Perceptrons, LSTM, Temporal Graph-based Neural Networks, and compare them with a baseline statistical model ARIMAX.
 
 ## Installation
 
